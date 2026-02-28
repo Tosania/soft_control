@@ -1,0 +1,11 @@
+[2026-03-01 00:16:36,615] [INFO] Application initialized successfully.
+[2026-03-01 00:16:39,598] [INFO] Switched to Preset Experiment 1.
+[2026-03-01 00:16:40,802] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-03-01 00:17:20,753] [INFO] Task Completed: Preset Experiment 1 Completed (10s)
+[2026-03-01 00:17:28,504] [INFO] Simulation started. Target: [0.4, 0.4, 0.7]
+[2026-03-01 00:17:30,258] [INFO] Simulation started. Target: [0.4, 0.4, 0.7]
+[2026-03-01 00:17:30,970] [INFO] System stopped and reset.
+[2026-03-01 00:17:31,884] [INFO] Simulation started. Target: [0.4, 0.4, 0.7]
+[2026-03-01 00:17:31,927] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.90m > 0.7m)
+[2026-03-01 00:17:32,905] [INFO] Simulation started. Target: [0.4, 0.4, 0.7]
+[2026-03-01 00:18:18,743] [INFO] Task Completed: Preset Experiment 1 Completed (10s)

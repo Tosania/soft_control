@@ -1,0 +1,319 @@
+<mujoco model="official_elastic_rod_cable_upright">
+<size      
+  nstack="20000000"    
+  nconmax="8000"      
+  njmax="300000"      
+/>
+
+  <compiler angle="radian" coordinate="local" inertiafromgeom="true"/>
+  <option timestep="0.002" gravity="0 0 -9.8" integrator="implicitfast" />
+
+  <!-- 启用 MuJoCo 官方弹性 “cable” 插件 -->
+  <extension>
+    <plugin plugin="mujoco.elasticity.cable"/>
+  </extension>
+
+  <asset>
+    <texture name="texplane" type="2d" builtin="checker"
+             width="512" height="512" rgb1="0.2 0.4 0.8" rgb2="1 1 1" mark="none"/>
+    <material name="ground" texture="texplane" texrepeat="4 4" reflectance="0.2"/>
+  </asset>
+
+  <worldbody>
+    <!-- 地面 -->
+    <geom name="floor" type="plane" size="3 3 0.1"
+          material="ground" contype="1" conaffinity="1"
+          friction="1 0.005 0.0001"/>
+    <body name="target_body" pos="0 0 0" mocap="true">
+    <geom type="sphere" size="0.015" rgba="0 1 0 0.5" contype="0" conaffinity="0"/>
+    </body>
+    <!-- <body name="white_backdrop" pos="0 -0.5 1.0">
+        <geom type="box" size="2 0.01 2" rgba="1 1 1 1" 
+              contype="0" conaffinity="0"/>
+    </body>  -->
+    <!-- 竖直的弹性杆：将原本沿 x 的 cable 通过父 body 旋转到 z 方向 -->
+    <body name="rod_base" pos="0 0 1.3"> <!-- 略抬起 1 cm，避免与地面接触穿插 -->
+      <site name="base_north"  pos="0 0.08 0.00" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_south" pos="0.0 -0.08 0.00" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_west" pos="-0.08 0 0.00" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_east" pos="0.08 0 0.00" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="base_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <!-- 绕 y 轴 +90°：x 轴 -> z 轴 -->
+      <body name="rod_upright"  quat="0 1 0 0">
+        <composite prefix="rod" type="cable"
+                   curve="0 0 s"             
+                   count="81 1 1"          
+                   size="1 0 0"          
+                   offset="0 0 0"           
+                   initial="fixed">
+
+          <!-- 物理参数：弯曲与扭转刚度 -->
+          <plugin plugin="mujoco.elasticity.cable">
+            <config key="twist" value="{twist_val}"/>
+            <config key="bend"  value="{bend_val}"/>
+            <!-- vmax 可设 0 表示不限制；这里给一个适中的限制以保持数值稳定 -->
+            <config key="vmax"  value="0"/>
+          </plugin>
+
+          <!-- 每段主关节的阻尼与等效转动惯量（稳定性） -->
+          <joint kind="main" damping="{damping_val}" armature="0.05"/>
+
+          <!-- 线缆段的可视几何（胶囊半径约 7.5 mm） -->
+          <geom type="capsule" size="0.002" rgba="0.8 0.2 0.1 1" density="0.01"/>
+          
+        </composite>
+      </body>
+
+      <!-- 可视化底端位置的小标记（非必须） -->
+      <site name="rod_root" pos="0 0 1.3" size="0.001" rgba="0.1 0.5 0.9 1"/>
+    </body>
+
+    <body name="ring_1_body" pos="0 0 1.2">
+    <joint type="free"/>
+      <geom name="ring_1" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring1_north"  pos="0 0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring1_south"  pos="0 -0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring1_east"  pos="0.08 0.0 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring1_west"  pos="-0.08 0 0" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring1_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring1_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring1_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring1_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_2_body" pos="0 0 1.1">
+    <joint type="free"/>
+      <geom name="ring_2" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring2_north"  pos="0 0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring2_south"  pos="0 -0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring2_east"  pos="0.08 0.0 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring2_west"  pos="-0.08 0 0" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring2_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring2_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring2_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring2_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_3_body" pos="0 0 1.0">
+    <joint type="free"/>
+      <geom name="ring_3" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring3_north"  pos="0 0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring3_south"  pos="0 -0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring3_east"  pos="0.08 0.0 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring3_west"  pos="-0.08 0 0" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring3_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring3_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring3_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring3_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_4_body" pos="0 0 0.9">
+    <joint type="free"/>
+      <geom name="ring_4" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring4_north"  pos="0 0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring4_south"  pos="0 -0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring4_east"  pos="0.08 0.0 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring4_west"  pos="-0.08 0 0" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring4_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring4_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring4_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring4_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_5_body" pos="0 0 0.8">
+    <joint type="free"/>
+      <geom name="ring_5" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring5_north"  pos="0 0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring5_south"  pos="0 -0.08 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring5_east"  pos="0.08 0.0 0.00" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring5_west"  pos="-0.08 0 0" size="0.003" rgba="1 0 0 1"/>
+      <site name="ring5_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring5_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring5_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring5_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_6_body" pos="0 0 0.7">
+    <joint type="free"/>
+      <geom name="ring_6" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring6_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring6_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring6_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring6_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_7_body" pos="0 0 0.6">
+    <joint type="free"/>
+      <geom name="ring_7" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      
+      <site name="ring7_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring7_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring7_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring7_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_8_body" pos="0 0 0.5">
+    <joint type="free"/>
+      <geom name="ring_8" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      <site name="ring8_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring8_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring8_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring8_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_9_body" pos="0 0 0.4">
+    <joint type="free"/>
+      <geom name="ring_9" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+     
+      <site name="ring9_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring9_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring9_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring9_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+    </body>
+
+    <body name="ring_10_body" pos="0 0 0.3">
+    <joint type="free"/>
+      <geom name="ring_10" type="cylinder" size="0.1 0.004"
+            density="5" rgba="0.2 0.2 0.2 0.5" contype="1" conaffinity="1"/>
+      
+      <site name="ring10_first" pos="0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring10_second" pos="-0.0566 0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring10_third" pos="-0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="ring10_fourth" pos="0.0566 -0.0566 0" size="0.001" rgba="0 1 0 1"/>
+      <site name="rod_tip" pos="0 0 0.00" size="0.002" rgba="1 1 0 1"/>
+    </body>
+  </worldbody>
+
+
+  <tendon>
+
+  <spatial name="tendon_north_1" width="0.002" rgba="0.1 0.1 0.9 1">
+    <site site="base_north"/>
+    <site site="ring1_north"/>
+    <site site="ring2_north"/>
+    <site site="ring3_north"/>
+    <site site="ring4_north"/>
+    <site site="ring5_north"/>
+  </spatial>
+
+  <spatial name="tendon_south_1" width="0.002" rgba="0.1 0.1 0.9 1">
+    <site site="base_south"/>
+    <site site="ring1_south"/>
+    <site site="ring2_south"/>
+    <site site="ring3_south"/>
+    <site site="ring4_south"/>
+    <site site="ring5_south"/>
+  </spatial>
+
+  <spatial name="tendon_east_1" width="0.002" rgba="0.1 0.1 0.9 1">
+    <site site="base_east"/>
+    <site site="ring1_east"/>
+    <site site="ring2_east"/>
+    <site site="ring3_east"/>
+    <site site="ring4_east"/>
+    <site site="ring5_east"/>
+  </spatial>
+
+  <spatial name="tendon_west_1" width="0.002" rgba="0.1 0.1 0.9 1">
+    <site site="base_west"/>
+    <site site="ring1_west"/>
+    <site site="ring2_west"/>
+    <site site="ring3_west"/>
+    <site site="ring4_west"/>
+    <site site="ring5_west"/>
+  </spatial>
+
+  <spatial name="tendon_first" width="0.002" rgba="0.9 0.1 0.1 1">
+    <site site="base_first"/>
+    <site site="ring1_first"/>
+    <site site="ring2_first"/>
+    <site site="ring3_first"/>
+    <site site="ring4_first"/>
+    <site site="ring5_first"/>
+    <site site="ring6_first"/>
+    <site site="ring7_first"/>
+    <site site="ring8_first"/>
+    <site site="ring9_first"/>
+    <site site="ring10_first"/>
+  </spatial>
+
+ <spatial name="tendon_second" width="0.002" rgba="0.9 0.1 0.1 1">
+    <site site="base_second"/>
+    <site site="ring1_second"/>
+    <site site="ring2_second"/>
+    <site site="ring3_second"/>
+    <site site="ring4_second"/>
+    <site site="ring5_second"/>
+    <site site="ring6_second"/>
+    <site site="ring7_second"/>
+    <site site="ring8_second"/>
+    <site site="ring9_second"/>
+    <site site="ring10_second"/>
+  </spatial>
+
+<spatial name="tendon_third" width="0.002" rgba="0.9 0.1 0.1 1">
+    <site site="base_third"/>
+    <site site="ring1_third"/>
+    <site site="ring2_third"/>
+    <site site="ring3_third"/>
+    <site site="ring4_third"/>
+    <site site="ring5_third"/>
+    <site site="ring6_third"/>
+    <site site="ring7_third"/>
+    <site site="ring8_third"/>
+    <site site="ring9_third"/>
+    <site site="ring10_third"/>
+  </spatial>
+
+<spatial name="tendon_fourth" width="0.002" rgba="0.9 0.1 0.1 1">
+    <site site="base_fourth"/>
+    <site site="ring1_fourth"/>
+    <site site="ring2_fourth"/>
+    <site site="ring3_fourth"/>
+    <site site="ring4_fourth"/>
+    <site site="ring5_fourth"/>
+    <site site="ring6_fourth"/>
+    <site site="ring7_fourth"/>
+    <site site="ring8_fourth"/>
+    <site site="ring9_fourth"/>
+    <site site="ring10_fourth"/>
+  </spatial>
+</tendon>
+
+  <actuator>
+  <!-- <position name="act_tendon_north_1" tendon="tendon_north_1" kp="{kp_val}" ctrllimited="true" ctrlrange="0 1"/>
+  <position name="act_tendon_south_1" tendon="tendon_south_1" kp="{kp_val}" ctrllimited="true" ctrlrange="0 1"/>
+  <position name="act_tendon_east_1"  tendon="tendon_east_1"  kp="{kp_val}" ctrllimited="true" ctrlrange="0 1"/>
+  <position name="act_tendon_west_1"  tendon="tendon_west_1"  kp="{kp_val}" ctrllimited="true" ctrlrange="0 1"/> -->
+  <!-- <position name="act_tendon_first"  tendon="tendon_first"  kp="{kp_val}" ctrllimited="true" ctrlrange="0 2"/> -->
+  <!-- <position name="act_tendon_second" tendon="tendon_second" kp="{kp_val}" ctrllimited="true" ctrlrange="0 2"/>
+  <position name="act_tendon_third"  tendon="tendon_third"  kp="{kp_val}" ctrllimited="true" ctrlrange="0 2"/>-->
+  <position name="act_tendon_fourth" tendon="tendon_fourth" kp="{kp_val}" ctrllimited="true" ctrlrange="0 2"/>
+  </actuator>
+
+  <equality>
+    <weld body1="rodB_first" body2="rod_base" solref="0.0001 1" solimp="0.999 0.999 0.01"/>
+    <weld body1="rodB_8" body2="ring_1_body" solref="0.0001 1" solimp="0.999 0.999 0.01"/>
+    <weld body1="rodB_16" body2="ring_2_body" solref="0.0001 1" solimp="0.999 0.999 0.01" />
+    <weld body1="rodB_24" body2="ring_3_body" solref="0.0001 1" solimp="0.999 0.999 0.01"/>
+    <weld body1="rodB_32" body2="ring_4_body" solref="0.0001 1" solimp="0.999 0.999 0.01"/>
+    <weld body1="rodB_40" body2="ring_5_body" solref="0.0001 1" solimp="0.999 0.999 0.01"/>
+    <weld body1="rodB_48" body2="ring_6_body" solref="0.0001 1" solimp="0.999 0.999 0.01" />
+    <weld body1="rodB_56" body2="ring_7_body" solref="0.0001 1" solimp="0.999 0.999 0.01" />
+    <weld body1="rodB_64" body2="ring_8_body" solref="0.0001 1" solimp="0.999 0.999 0.01" />
+    <weld body1="rodB_72" body2="ring_9_body" solref="0.0001 1"  solimp="0.999 0.999 0.01"/>
+    <weld body1="rodB_last" body2="ring_10_body" solref="0.0001 1" solimp="0.999 0.999 0.01"/>
+  </equality>
+</mujoco>

@@ -1,0 +1,10 @@
+[2026-03-01 00:02:58,470] [INFO] Application initialized successfully.
+[2026-03-01 00:03:01,930] [INFO] Switched to Preset Experiment 1.
+[2026-03-01 00:03:07,573] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-03-01 00:03:35,942] [ERROR] EMERGENCY STOP: Posture Singularity Detected: Bending Angle (60.0° > 60.0°)
+[2026-03-01 00:03:40,598] [INFO] Saved full history plot data to /home/tosania/Desktop/soft_control_v2/src/sim2real/data/sim_data_20260301_000340.npz
+[2026-03-01 00:03:45,949] [INFO] System stopped and reset.
+[2026-03-01 00:03:46,540] [INFO] System stopped and reset.
+[2026-03-01 00:03:56,549] [INFO] Simulation started. Target: [0.4, 0.4, 0.7]
+[2026-03-01 00:03:56,555] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.90m > 0.7m)
+[2026-03-01 00:03:59,263] [INFO] Simulation started. Target: [0.4, 0.4, 0.7]

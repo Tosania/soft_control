@@ -1,0 +1,5 @@
+[2026-02-28 00:30:47,693] [INFO] Application initialized successfully.
+[2026-02-28 00:32:00,744] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-02-28 00:32:12,449] [WARNING] Simulation paused.
+[2026-02-28 00:32:13,459] [INFO] Saved full history plot data to /home/tosania/Desktop/soft_control_v2/src/sim2real/data/sim_data_20260228_003213.npz
+[2026-02-28 00:32:17,731] [INFO] System stopped and reset.

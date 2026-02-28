@@ -1,0 +1,12 @@
+[2026-02-28 00:23:35,766] [INFO] Application initialized successfully.
+[2026-02-28 00:23:42,648] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-02-28 00:23:57,053] [WARNING] Simulation paused.
+[2026-02-28 00:23:58,476] [INFO] System stopped and reset.
+[2026-02-28 00:23:59,157] [WARNING] No data to save (Simulation has not run).
+[2026-02-28 00:24:01,491] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-02-28 00:24:01,519] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.50m > 0.4m)
+[2026-02-28 00:24:04,020] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-02-28 00:24:33,812] [WARNING] Simulation paused.
+[2026-02-28 00:24:34,496] [INFO] Saved plot data to /home/tosania/Desktop/soft_control_v2/src/sim2real/data/sim_data_20260228_002434.npz
+[2026-02-28 00:25:58,426] [INFO] System stopped and reset.
+[2026-02-28 00:25:58,922] [INFO] System stopped and reset.

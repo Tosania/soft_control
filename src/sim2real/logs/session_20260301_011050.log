@@ -1,0 +1,4 @@
+[2026-03-01 01:10:51,039] [INFO] Application initialized successfully.
+[2026-03-01 01:10:57,541] [INFO] Simulation started. Target: [0.0, 0.0, 0.5]
+[2026-03-01 01:12:06,545] [INFO] System stopped and reset.
+[2026-03-01 01:12:06,556] [ERROR] EMERGENCY STOP: Posture Singularity Detected: Bending Angle (90.0° > 60.0°)
