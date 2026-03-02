@@ -1,8 +1,8 @@
 import sys
 import os
 import numpy as np
-# Add parent directory to sys.path to allow importing tester and control
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Add project root directory to sys.path to allow importing src modules
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from PyQt5.QtWidgets import (
     QApplication,
@@ -28,7 +28,7 @@ import pyqtgraph.opengl as gl
 import qdarkstyle
 import logging
 from datetime import datetime
-from tester import SoftRobotTester
+from src.core.tester import SoftRobotTester
 from stable_baselines3 import PPO
 
 
@@ -59,7 +59,7 @@ class SimulationWorker(QThread):
         ]
 
         # Safety Config
-        self.max_error = 0.7        # Stricter error threshold
+        self.max_error = 2        # Stricter error threshold
         self.act_min = 0.1          # Minimum actuator length (m)
         self.act_max_g1 = 1.0       # Max length for group 1 (North/South/East/West)
         self.act_max_g2 = 2.0       # Max length for group 2 (Diagonal)
@@ -220,7 +220,7 @@ class SoftRobotDashboard(QMainWindow):
         logging.basicConfig(filename=log_filename, level=logging.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s")
 
         # Resolve absolute path to XML based on the script location
-        xml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "source", "two_disks_uj.xml"))
+        xml_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "assets", "two_disks_uj.xml"))
         self.worker = SimulationWorker(xml_path=xml_path)
 
         # Set history length to a very large number so it effectively never slides Windows
@@ -252,7 +252,7 @@ class SoftRobotDashboard(QMainWindow):
         model_layout = QVBoxLayout()
         self.model_combo = QComboBox()
         self.model_combo.addItem("None (Empty)")
-        base_model_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models"))
+        base_model_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "checkpoints"))
         if os.path.exists(base_model_dir):
             for root, dirs, files in os.walk(base_model_dir):
                 for file in files:

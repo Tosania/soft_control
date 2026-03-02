@@ -1,0 +1,6 @@
+[2026-03-02 21:12:48,364] [INFO] Application initialized successfully.
+[2026-03-02 21:12:59,003] [INFO] Simulation started. Target: [0.3, 0.3, 0.9]
+[2026-03-02 21:13:09,130] [WARNING] Simulation paused.
+[2026-03-02 21:13:11,844] [INFO] System stopped and reset.
+[2026-03-02 21:13:16,039] [INFO] Simulation started. Target: [0.3, 0.3, 0.9]
+[2026-03-02 21:13:22,238] [WARNING] Simulation paused.

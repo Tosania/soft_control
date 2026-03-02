@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -70,7 +74,7 @@ if __name__ == "__main__":
         target_file = sys.argv[1]
     else:
         # If no file provided, find the newest .npz file in the data folder
-        data_files = glob.glob('src/sim2real/data/*.npz')
+        data_files = glob.glob('data/sim2real/*.npz')
         if not data_files:
             print("No .npz files found in src/sim2real/data/ !")
             sys.exit(1)

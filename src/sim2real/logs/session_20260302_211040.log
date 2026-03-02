@@ -1,0 +1,36 @@
+[2026-03-02 21:10:40,615] [INFO] Application initialized successfully.
+[2026-03-02 21:10:56,124] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:10:56,395] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:00,351] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:00,360] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:00,980] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:01,020] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:01,180] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:01,227] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:01,346] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:01,387] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:01,775] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:01,796] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:02,009] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:02,053] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.71m > 0.7m)
+[2026-03-02 21:11:02,177] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:02,212] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:02,344] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:02,509] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:02,566] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:02,675] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:02,723] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:03,876] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:03,884] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:04,902] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:04,945] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:06,948] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:06,959] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:07,479] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:07,517] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:07,679] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:07,726] [ERROR] EMERGENCY STOP: Tracking Error Exceeded Threshold (0.70m > 0.7m)
+[2026-03-02 21:11:07,842] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:08,001] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:08,160] [INFO] Simulation started. Target: [0.1, 0.1, 1.0]
+[2026-03-02 21:11:13,939] [ERROR] EMERGENCY STOP: Posture Singularity Detected: Bending Angle (60.0° > 60.0°)
