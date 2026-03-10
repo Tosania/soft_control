@@ -110,7 +110,7 @@ class RealTimePlotter:
 
 
 class SoftRobotTester:
-    def __init__(self, xml_path, model_path=None, mode="pcc", render=True, video=False):
+    def __init__(self, xml_path, model_path=None, mode="pcc", render=True, video=False, obs_type="tip_velocity"):
         """
         底层测试驱动器
         :param xml_path: XML 文件路径
@@ -152,6 +152,8 @@ class SoftRobotTester:
         self.residual_scale = 0.08
         self.mid_body_name = "ring_5_body"
         self.rl_model = None
+        self.last_tip_pos = np.zeros(3)
+        self.current_tip_velocity = np.zeros(3)
 
         if self.mode == "hybrid":
             if model_path:
@@ -176,6 +178,7 @@ class SoftRobotTester:
 
         # --- 4. 可视化 ---
         self.video = video
+        self.obs_type = obs_type
         if video:
             self.plotter = RealTimePlotter()
         self.viewer = None
@@ -218,7 +221,10 @@ class SoftRobotTester:
         self.warm = 0
         # === 关键：重置仿真时间为 0 ===
         # 这样你的测试脚本就会认为实验是从 0 秒开始的，且机器人已经就位
-        self.mj_data.time = 0.0
+        import contextlib
+        ctx = self.viewer.lock() if self.viewer else contextlib.nullcontext()
+        with ctx:
+            self.mj_data.time = 0.0
 
     def _load_mujoco(self):
         """内部函数：读取模板并初始化物理引擎"""
@@ -272,27 +278,21 @@ class SoftRobotTester:
         except:
             real_tip_pos = self.mj_data.body(self.tip_body_name).xpos.copy()
 
-        real_mid_pos = self.mj_data.body(self.mid_body_name).xpos.copy()
-
         # 计算特征
         tip_error = target_pos - real_tip_pos
 
-        xi_curr = self.controller.xi_curr
-        fk_points = self.robot_math_model.get_fk_points(xi_curr)
-        expected_mid_pos = fk_points[0]
-
-        if self.freeze_pcc:
-            if self.frozen_expected_mid_pos is None:
-                self.frozen_expected_mid_pos = expected_mid_pos.copy()
-            else:
-                expected_mid_pos = self.frozen_expected_mid_pos.copy()
+        if self.obs_type == "tip_velocity":
+            if not hasattr(self, 'current_tip_velocity'):
+                self.current_tip_velocity = np.zeros(3)
+            feature_3 = self.current_tip_velocity.copy()
         else:
-            self.frozen_expected_mid_pos = expected_mid_pos.copy()
+            try:
+                feature_3 = self.mj_data.body(self.mid_body_name).xpos.copy()
+            except:
+                feature_3 = np.zeros(3)
 
-        mid_shape_error = real_mid_pos - expected_mid_pos
-
-        # 14维向量: [TipErr(3), ShapeErr(3), PCC_Cmd(8)]
-        obs = np.concatenate([tip_error, mid_shape_error, l_base]).astype(np.float32)
+        # 14维向量: [TipErr(3), Feature(3), PCC_Cmd(8)]
+        obs = np.concatenate([tip_error, feature_3, l_base]).astype(np.float32)
         return obs
 
     # =========================================================
@@ -314,8 +314,16 @@ class SoftRobotTester:
 
     def reset(self):
         """重置仿真环境和控制器状态"""
-        mujoco.mj_resetData(self.mj_model, self.mj_data)
-        self.mj_data.xfrc_applied.fill(0)
+        if self.viewer:
+            with self.viewer.lock():
+                mujoco.mj_resetData(self.mj_model, self.mj_data)
+                self.mj_data.xfrc_applied.fill(0)
+        else:
+            mujoco.mj_resetData(self.mj_model, self.mj_data)
+            self.mj_data.xfrc_applied.fill(0)
+            
+        self.last_tip_pos = np.zeros(3)
+        self.current_tip_velocity = np.zeros(3)
         if self.video:
             self.plotter = RealTimePlotter()
         self.controller = PCCController(
@@ -334,7 +342,11 @@ class SoftRobotTester:
         """
         self.current_target = np.array(target_pos, dtype=np.float64)
         # 更新可视化小球
-        self.mj_data.mocap_pos[0] = self.current_target
+        if self.viewer:
+            with self.viewer.lock():
+                self.mj_data.mocap_pos[0] = self.current_target
+        else:
+            self.mj_data.mocap_pos[0] = self.current_target
 
     def set_load(self, force_vec):
         """
@@ -348,48 +360,58 @@ class SoftRobotTester:
         执行单步仿真
         :return: info 字典，包含时间、实际位置、误差、控制指令等详细信息
         """
-        # 1. 施加外力 (Force Application)
-        self.mj_data.xfrc_applied.fill(0)
-        if self.tip_body_id != -1:
-            self.mj_data.xfrc_applied[self.tip_body_id][:3] = self.current_force
-
-        # 2. 获取反馈 (Feedback)
-        try:
-            curr_tip = self.mj_data.site("rod_tip").xpos.copy()
-        except:
-            curr_tip = self.mj_data.body(self.tip_body_name).xpos.copy()
-
-        # 3. 计算基准控制量 (PCC Control)
-        l_base, _ = self.controller.step(self.current_target, curr_tip)
-
-        if self.freeze_pcc:
-            if self.frozen_l_base is None:
-                self.frozen_l_base = l_base.copy()
+        import contextlib
+        ctx = self.viewer.lock() if self.viewer else contextlib.nullcontext()
+        
+        with ctx:
+            # 1. 施加外力 (Force Application)
+            self.mj_data.xfrc_applied.fill(0)
+            if self.tip_body_id != -1:
+                self.mj_data.xfrc_applied[self.tip_body_id][:3] = self.current_force
+    
+            # 2. 获取反馈 (Feedback)
+            try:
+                curr_tip = self.mj_data.site("rod_tip").xpos.copy()
+            except:
+                curr_tip = self.mj_data.body(self.tip_body_name).xpos.copy()
+                
+            if not hasattr(self, 'last_tip_pos') or np.linalg.norm(self.last_tip_pos) == 0:
+                self.last_tip_pos = curr_tip.copy()
+            self.current_tip_velocity = (curr_tip - self.last_tip_pos) / self.mj_model.opt.timestep
+            self.last_tip_pos = curr_tip.copy()
+    
+            # 3. 计算基准控制量 (PCC Control)
+            l_base, _ = self.controller.step(self.current_target, curr_tip)
+    
+            if self.freeze_pcc:
+                if self.frozen_l_base is None:
+                    self.frozen_l_base = l_base.copy()
+                else:
+                    l_base = self.frozen_l_base.copy()
             else:
-                l_base = self.frozen_l_base.copy()
-        else:
-            self.frozen_l_base = l_base.copy()
-
-        # 4. 计算残差 (RL Logic)
-        l_residual = np.zeros(8)
-        if self.mode == "hybrid" and self.model_loaded:
-            obs = self._get_obs(self.current_target, l_base)
-            action, _ = self.rl_model.predict(obs, deterministic=True)
-            l_residual = action * self.residual_scale
-
-        # 5. 合成并下发指令 (Command limit & Actuation)
-        l_cmd = l_base + l_residual
-        l_cmd[:4] = np.clip(l_cmd[:4], 0.1, 0.9)
-        l_cmd[4:] = np.clip(l_cmd[4:], 0.3, 1.7)
-
-        self.mj_data.ctrl[self.act_ids] = l_cmd
-        error = np.linalg.norm(self.current_target - curr_tip)
-
-        # 3. 每隔 N 步更新一次图形（避免降低仿真频率）
-        if self.video and self.warm == 0:
-            self.plotter.update(error)
-        # 6. 物理步进 (Physics Step)
-        mujoco.mj_step(self.mj_model, self.mj_data)
+                self.frozen_l_base = l_base.copy()
+    
+            # 4. 计算残差 (RL Logic)
+            l_residual = np.zeros(8)
+            if self.mode == "hybrid" and self.model_loaded:
+                obs = self._get_obs(self.current_target, l_base)
+                action, _ = self.rl_model.predict(obs, deterministic=True)
+                l_residual = action * self.residual_scale
+    
+            # 5. 合成并下发指令 (Command limit & Actuation)
+            l_cmd = l_base + l_residual
+            l_cmd[:4] = np.clip(l_cmd[:4], 0.1, 0.9)
+            l_cmd[4:] = np.clip(l_cmd[4:], 0.3, 1.7)
+    
+            self.mj_data.ctrl[self.act_ids] = l_cmd
+            error = np.linalg.norm(self.current_target - curr_tip)
+    
+            # 3. 每隔 N 步更新一次图形（避免降低仿真频率）
+            if self.video and self.warm == 0:
+                self.plotter.update(error)
+            # 6. 物理步进 (Physics Step)
+            mujoco.mj_step(self.mj_model, self.mj_data)
+                
         # 7. 渲染 (Render)
         if self.viewer:
             self.viewer.sync()

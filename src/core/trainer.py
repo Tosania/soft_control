@@ -72,6 +72,11 @@ class TensorboardCallback(BaseCallback):
                 # 记录核心指标：平均追踪误差 (m)
                 self.logger.record("custom/tracking_error", mean_dist)
 
+            for val_key in ["r_dist_weighted", "r_effort_weighted", "r_smooth_weighted"]:
+                vals = [info.get(val_key) for info in infos if val_key in info and info.get(val_key) is not None]
+                if vals:
+                    self.logger.record(f"reward_components/{val_key}", np.mean(vals))
+
         # 记录瞬时奖励 (Step Reward) 用于分析奖励函数的稠密程度
         rewards = self.locals.get("rewards", [])
         if rewards is not None and len(rewards) > 0:
@@ -199,39 +204,34 @@ class SoftRobotTrainer:
 # ==========================================
 if __name__ == "__main__":
     XML_FILE = "./assets/two_disks_uj.xml"
-    trainer = SoftRobotTrainer(experiment_name="legacy_replica_v5")
+    trainer = SoftRobotTrainer(experiment_name="legacy_replica_v7")
     trainer.run(
         xml_path="./assets/two_disks_uj.xml",
         # 1. 训练超参数 (复刻 train.py)
         train_params={
-            "total_timesteps": 2000_0000,  # 原版代码是 800万 (注意：原版注释写的100万，但代码是800万，此处以代码为准)
-            "num_envs": 32,  # 原版: 32
-            "seed": 1046,  # 原版: 1048
-            "learning_rate": 3e-4,  # 原版: 3e-4
-            "n_steps": 512,  # 原版: 128
-            "batch_size": 1024 * 4,  # 原版: 128 * 8 = 1024
-            "net_arch": [64, 64],  # 原版: policy_kwargs=dict(net_arch=[128, 128])
-            # "ent_coef": 0.005,  # 原版: 0.005 (需确认Trainer是否支持传入此参，若不支持可忽略)
+            "total_timesteps": 2000_0000,
+            "num_envs": 32,
+            "seed": 1048,
+            "learning_rate": 3e-4,
+            "n_steps": 512,
+            "batch_size": 4096,
+            "net_arch": [128, 128],
         },
-        # 2. 环境逻辑参数 (复刻 soft_robot_env.py 中的硬编码)
+        # 2. 环境逻辑参数 (还原至 v3 状态)
         env_config={
             "reward_weights": {
-                "dist": 3.0, 
-                "smooth": 2.0,  # 提高平滑惩罚抗高频震荡
+                "dist": 2.0, 
+                "smooth": 0.5,
                 "effort": 0.5,
-                "shape": 0.2, 
-                "damping": 0.5, # 恢复阻尼惩罚抗震荡
             },
             "reward_scales": {
-                "dist_scale": 10.0,  # 配合 np.exp 指数衰减 (原来是 50 线性惩罚)
-                "vel_penalty_scale": 0.1, 
-                # (已移除 effort_dist_scale)
+                "dist_scale": 5.0, 
             },
             "limits": {
-                "max_time": 20.0,  # 原版: if self.data.time > 20.0
-                "max_dist_error": 0.6,  # 原版: if distance > 0.2
-                "strict_fail_penalty": 5.0,  # 原版: reward -= 2.0
+                "max_time": 20.0,  
+                "max_dist_error": 0.3,
+                "strict_fail_penalty": 2.0,
             },
         },
     )
-    # os.system("shutdown -h now")
+    #os.system("shutdown -h now")

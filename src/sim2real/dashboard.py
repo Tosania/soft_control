@@ -42,15 +42,15 @@ class SimulationWorker(QThread):
         self.use_pcc = True
         self.target_pos = [0.0, 0.0, 0.5]
         self.tester = SoftRobotTester(
-            xml_path=self.xml_path, mode="pcc", render=True, video=False
+            xml_path=self.xml_path, mode="pcc", render=True, video=False, obs_type="tip_velocity"
         )
         self.l_rest = np.array([0.5] * 4 + [1.0] * 4)
         self.last_cmd_total = None
         self.current_force = [0.0, 0.0, 0.0]
 
-        # Preset mode state
         self.preset_mode = 0
         self.preset_start_mj_time = None
+        self.pre_stabilize = False
         self.disturbance_events_exp2 = [
             {"start_time": 4.0, "impulse_vec": [10.0, 0.0, 0.0], "impulse_dur": 0.15, "step_vec": [3.0, 0.0, 0.0], "step_dur": 2.0},
             {"start_time": 8.0, "impulse_vec": [0.0, -10.0, 0.0], "impulse_dur": 0.15, "step_vec": [0.0, -2.0, -5.0], "step_dur": 2.5},
@@ -82,6 +82,16 @@ class SimulationWorker(QThread):
         while True:
             if self.is_running:
                 if self.preset_start_mj_time is None:
+                    # Determine initial target depending on mode
+                    if self.preset_mode == 1:
+                        self.target_pos = [0.4, 0.4, 0.7]
+                    elif self.preset_mode == 2:
+                        self.target_pos = [0.15, 0.0, 0.52]
+                    
+                    if self.pre_stabilize:
+                        self.tester.set_load([0.0, 0.0, 0.0])
+                        self.tester.stabilize_at(self.target_pos, tolerance=0.02, max_steps=600)
+                        
                     self.preset_start_mj_time = self.tester.mj_data.time
                 
                 current_sim_time = self.tester.mj_data.time - self.preset_start_mj_time
@@ -228,7 +238,9 @@ class SoftRobotDashboard(QMainWindow):
         
         # Lists for unbounded data collection (for exporting)
         self.time_data = []
-        self.error_data = []
+        self.error_data = [] # current run
+        self.hist_time_data = [] # history run
+        self.hist_error_data = []
         self.rl_action_data = [[] for _ in range(8)]
         self.pcc_action_data = [[] for _ in range(8)]
         self.total_action_data = [[] for _ in range(8)]
@@ -261,6 +273,14 @@ class SoftRobotDashboard(QMainWindow):
                         self.model_combo.addItem(full_path)
         self.model_combo.currentTextChanged.connect(self._on_model_changed)
         model_layout.addWidget(self.model_combo)
+
+        self.obs_type_combo = QComboBox()
+        self.obs_type_combo.addItem("New Model (Tip Velocity)")
+        self.obs_type_combo.addItem("Old Model (Mid Coordinate)")
+        self.obs_type_combo.currentIndexChanged.connect(self._on_obs_type_changed)
+        model_layout.addWidget(QLabel("Observation Type:"))
+        model_layout.addWidget(self.obs_type_combo)
+
         model_group.setLayout(model_layout)
         control_layout.addWidget(model_group)
 
@@ -356,6 +376,12 @@ class SoftRobotDashboard(QMainWindow):
         self.preset_combo.addItem("2: Exp 2 - Trajectory & Complex Load")
         self.preset_combo.currentIndexChanged.connect(self._on_preset_changed)
         preset_layout.addWidget(self.preset_combo)
+
+        self.chk_pre_stabilize = QCheckBox("Pre-stabilize before Start")
+        self.chk_pre_stabilize.setChecked(False)
+        self.chk_pre_stabilize.stateChanged.connect(self._on_pre_stabilize_toggled)
+        preset_layout.addWidget(self.chk_pre_stabilize)
+
         preset_group.setLayout(preset_layout)
         control_layout.addWidget(preset_group)
 
@@ -425,67 +451,81 @@ class SoftRobotDashboard(QMainWindow):
         
         dashboard_layout.addLayout(top_info_layout)
 
-        # 2. 3 Real-time visual panels
+        # 2. Real-time visual panels (Left: Pos+Force, Right: Error Stats, Far Right: Safety)
         visuals_layout = QHBoxLayout()
         
-        # Panel 1: XY Trajectory (Radar Style)
-        self.plot_xy = pg.PlotWidget(title="XY Trajectory (Top View)")
-        self.plot_xy.setLabel("left", "Y (m)")
-        self.plot_xy.setLabel("bottom", "X (m)")
-        self.plot_xy.setXRange(-0.8, 0.8)
-        self.plot_xy.setYRange(-0.8, 0.8)
-        self.plot_xy.setAspectLocked(True) # 1:1 Aspect Ratio
-        self.plot_xy.hideAxis('bottom')
-        self.plot_xy.hideAxis('left')
+        # --- Left Panel: Consolidated Real-time States ---
+        state_panel = QGroupBox("Real-time Tracking & Load States")
+        state_layout = QVBoxLayout(state_panel)
         
-        # Radar circles
-        for r in [0.2, 0.4, 0.6, 0.8]:
-            circle = QGraphicsEllipseItem(-r, -r, r*2, r*2)
-            circle.setPen(pg.mkPen((100, 100, 100, 150), width=1, style=Qt.DashLine))
-            self.plot_xy.addItem(circle)
-            text = pg.TextItem(f"{r}m", color=(150, 150, 150), anchor=(0.5, 1))
-            self.plot_xy.addItem(text)
-            text.setPos(0, -r)
-            
-        # Crosshairs
-        v_line = pg.InfiniteLine(angle=90, pen=pg.mkPen((100, 100, 100, 150)))
-        h_line = pg.InfiniteLine(angle=0, pen=pg.mkPen((100, 100, 100, 150)))
-        self.plot_xy.addItem(v_line)
-        self.plot_xy.addItem(h_line)
-            
-        # Curves
-        self.traj_curve = self.plot_xy.plot(pen=pg.mkPen('c', width=2))
-        self.target_scatter = pg.ScatterPlotItem(size=12, pen=pg.mkPen(None), brush=pg.mkBrush(255, 0, 0))
-        self.current_scatter = pg.ScatterPlotItem(size=10, pen=pg.mkPen(None), brush=pg.mkBrush(0, 255, 0))
-        self.plot_xy.addItem(self.target_scatter)
-        self.plot_xy.addItem(self.current_scatter)
-        self.depth_text = pg.TextItem(text="Z: 0.00m", color=(200, 200, 200), anchor=(0, 1))
-        self.plot_xy.addItem(self.depth_text)
-        self.depth_text.setPos(-0.75, 0.75)
-        visuals_layout.addWidget(self.plot_xy, stretch=1)
+        # Position sub-section
+        pos_layout = QFormLayout()
+        self.lbl_target_pos = QLabel("[0.000, 0.000, 0.000]")
+        self.lbl_curr_pos = QLabel("[0.000, 0.000, 0.000]")
+        self.lbl_pos_err = QLabel("[0.000, 0.000, 0.000]")
         
-        # Panel 2: Force Vector (2D)
-        self.plot_force = pg.PlotWidget(title="XY Plane Applied Force (N)")
-        self.plot_force.setXRange(-50, 50)
-        self.plot_force.setYRange(-50, 50)
-        self.plot_force.setAspectLocked(True) # 1:1 Aspect Ratio
-        self.plot_force.showGrid(x=True, y=True)
+        self.lbl_target_pos.setFont(self._get_mono_font())
+        self.lbl_curr_pos.setFont(self._get_mono_font())
+        self.lbl_pos_err.setFont(self._get_mono_font())
+
+        pos_layout.addRow("Target Position (m):", self.lbl_target_pos)
+        pos_layout.addRow("Current Tip (m):", self.lbl_curr_pos)
+        pos_layout.addRow("XYZ Error (m):", self.lbl_pos_err)
+        state_layout.addLayout(pos_layout)
         
-        # Crosshairs
-        v_line_f = pg.InfiniteLine(angle=90, pen=pg.mkPen((100, 100, 100, 150)))
-        h_line_f = pg.InfiniteLine(angle=0, pen=pg.mkPen((100, 100, 100, 150)))
-        self.plot_force.addItem(v_line_f)
-        self.plot_force.addItem(h_line_f)
+        # Force sub-section
+        force_layout = QFormLayout()
+        self.lbl_force = QLabel("[0.0, 0.0, 0.0]")
+        self.lbl_force_mag = QLabel("0.00 N")
         
-        self.force_arrow = pg.ArrowItem(angle=0, tipAngle=30, baseAngle=20, headLen=20, tailLen=0.1, tailWidth=3, pen={'color': 'r', 'width': 2}, brush='r')
-        self.plot_force.addItem(self.force_arrow)
-        self.force_arrow.setPos(0, 0) # Base
-        self.force_line_2d = self.plot_force.plot(pen=pg.mkPen('r', width=3))
+        self.lbl_force.setFont(self._get_mono_font())
+        self.lbl_force_mag.setFont(self._get_mono_font())
+
+        force_layout.addRow("Load Vector (N):", self.lbl_force)
+        force_layout.addRow("Load Magnitude (N):", self.lbl_force_mag)
+        state_layout.addLayout(force_layout)
         
-        self.force_z_text = pg.TextItem(text="Fz: 0.0 N", color=(255, 100, 100), anchor=(0, 1))
-        self.plot_force.addItem(self.force_z_text)
-        self.force_z_text.setPos(-45, 45)
-        visuals_layout.addWidget(self.plot_force, stretch=1)
+        visuals_layout.addWidget(state_panel, stretch=1)
+
+        # --- Middle Panel: Error Statistics (Current vs History) ---
+        stats_panel = QGroupBox("Tracking Error Statistics")
+        stats_layout = QFormLayout(stats_panel)
+        
+        # Header Row
+        lbl_head1 = QLabel("Current Run")
+        lbl_head2 = QLabel("History Run")
+        lbl_head1.setStyleSheet("font-weight: bold; color: #4CAF50;")
+        lbl_head2.setStyleSheet("font-weight: bold; color: #00FFFF;")
+        
+        h_layout = QHBoxLayout()
+        h_layout.addWidget(lbl_head1)
+        h_layout.addWidget(lbl_head2)
+        stats_layout.addRow("", h_layout)
+
+        # Labels for Current
+        self.lbl_err_avg_cur = QLabel("0.000 m")
+        self.lbl_err_max_cur = QLabel("0.000 m")
+        self.lbl_err_end_cur = QLabel("0.000 m")
+        
+        # Labels for History
+        self.lbl_err_avg_hist = QLabel("-")
+        self.lbl_err_max_hist = QLabel("-")
+        self.lbl_err_end_hist = QLabel("-")
+        
+        for lbl in [self.lbl_err_avg_cur, self.lbl_err_max_cur, self.lbl_err_end_cur, self.lbl_err_avg_hist, self.lbl_err_max_hist, self.lbl_err_end_hist]:
+            lbl.setFont(self._get_mono_font())
+
+        def make_stat_row(cur, hist):
+            h = QHBoxLayout()
+            h.addWidget(cur)
+            h.addWidget(hist)
+            return h
+
+        stats_layout.addRow("Average Error:", make_stat_row(self.lbl_err_avg_cur, self.lbl_err_avg_hist))
+        stats_layout.addRow("Max Error:", make_stat_row(self.lbl_err_max_cur, self.lbl_err_max_hist))
+        stats_layout.addRow("Final Error:", make_stat_row(self.lbl_err_end_cur, self.lbl_err_end_hist))
+        
+        visuals_layout.addWidget(stats_panel, stretch=1)
         
         # Panel 3: Safety System Monitor
         safety_panel = QGroupBox("Safety Guard System")
@@ -531,6 +571,7 @@ class SoftRobotDashboard(QMainWindow):
         self.plot_error = pg.PlotWidget()
         self.plot_error.setLabel("left", "Error (m)")
         self.plot_error.setLabel("bottom", "Time Steps")
+        self.hist_error_curve = self.plot_error.plot(pen=pg.mkPen(color=(0, 255, 255, 200), width=2, style=Qt.DashLine))
         self.error_curve = self.plot_error.plot(pen=pg.mkPen(color="r", width=2))
         
         self.tabs.addTab(self.plot_error, "Tracking Error")
@@ -607,8 +648,18 @@ class SoftRobotDashboard(QMainWindow):
     def _on_model_changed(self, text):
         self.worker.load_rl_model(text)
 
+    def _on_obs_type_changed(self, index):
+        if hasattr(self, "worker") and hasattr(self.worker, "tester"):
+            if index == 0:
+                self.worker.tester.obs_type = "tip_velocity"
+            else:
+                self.worker.tester.obs_type = "mid_coord"
+
     def _on_pcc_toggled(self, state):
         self.worker.use_pcc = state == Qt.Checked
+
+    def _on_pre_stabilize_toggled(self, state):
+        self.worker.pre_stabilize = state == Qt.Checked
 
     def _on_preset_changed(self, index):
         self.worker.preset_mode = index
@@ -670,7 +721,11 @@ class SoftRobotDashboard(QMainWindow):
         self._set_led_color(self.led_safety, "green")
         self.lbl_safety_text.setText("System Running Normally")
         self.worker.is_running = True
-        self._log("INFO", f"Simulation started. Target: {self.worker.target_pos}")
+        
+        if self.worker.pre_stabilize:
+            self._log("INFO", f"Simulation started. Pre-stabilizing to {self.worker.target_pos}...")
+        else:
+            self._log("INFO", f"Simulation started. Target: {self.worker.target_pos}")
 
     def _on_pause(self):
         if self.worker.is_running:
@@ -681,9 +736,28 @@ class SoftRobotDashboard(QMainWindow):
     def _on_stop(self):
         self.worker.is_running = False
         self.worker.tester.reset()
+        
+        # Save current run as history
+        if len(self.time_data) > 0:
+            self.hist_time_data = self.time_data.copy()
+            self.hist_error_data = self.error_data.copy()
+            
+            # Update history statistics UI
+            avg_err = np.mean(self.hist_error_data)
+            max_err = np.max(self.hist_error_data)
+            end_err = self.hist_error_data[-1]
+            self.lbl_err_avg_hist.setText(f"{avg_err:.3f} m")
+            self.lbl_err_max_hist.setText(f"{max_err:.3f} m")
+            self.lbl_err_end_hist.setText(f"{end_err:.3f} m")
+            
         self.step_count = 0
         self.time_data.clear()
         self.error_data.clear()
+        
+        # Clear current statistics UI
+        self.lbl_err_avg_cur.setText("0.000 m")
+        self.lbl_err_max_cur.setText("0.000 m")
+        self.lbl_err_end_cur.setText("0.000 m")
         
         for i in range(8):
             self.rl_action_data[i].clear()
@@ -691,11 +765,14 @@ class SoftRobotDashboard(QMainWindow):
             self.total_action_data[i].clear()
             
         self._refresh_plots()
-        self.traj_x = []
-        self.traj_y = []
-        self.traj_curve.setData([], [])
-        self.force_line_2d.setData([], [])
-        self.force_arrow.setPos(0, 0)
+        
+        # Plot history data
+        self.hist_error_curve.setData(self.hist_time_data, self.hist_error_data)
+        self.lbl_target_pos.setText("[0.000, 0.000, 0.000]")
+        self.lbl_curr_pos.setText("[0.000, 0.000, 0.000]")
+        self.lbl_pos_err.setText("[0.000, 0.000, 0.000]")
+        self.lbl_force.setText("[0.0, 0.0, 0.0]")
+        self.lbl_force_mag.setText("0.00 N")
         self.error_bar.setValue(0)
         self._set_led_color(self.led_sim2real, "gray")
         self._set_led_color(self.led_safety, "green")
@@ -822,41 +899,31 @@ class SoftRobotDashboard(QMainWindow):
             self.spin_fy.blockSignals(False)
             self.spin_fz.blockSignals(False)
 
-        # Update Visuals
-        if not hasattr(self, 'traj_x'):
-            self.traj_x = []
-            self.traj_y = []
-        
-        self.traj_x.append(curr_tip[0])
-        self.traj_y.append(curr_tip[1])
-        if len(self.traj_x) > 300:
-            self.traj_x.pop(0)
-            self.traj_y.pop(0)
-        
-        self.traj_curve.setData(self.traj_x, self.traj_y)
+        # Update Visuals (Text Panels)
         cur_target = info.get("current_target_pos", [0, 0, 0])
-        self.target_scatter.setData([cur_target[0]], [cur_target[1]])
-        self.current_scatter.setData([curr_tip[0]], [curr_tip[1]])
-        self.depth_text.setText(f"Tip Z: {curr_tip[2]:.3f}m\nTarget Z: {cur_target[2]:.3f}m")
-        # Place text at top-left of the viewbox regardless of dynamic sizing
-        rect = self.plot_xy.viewRect()
-        self.depth_text.setPos(rect.left() + (rect.width()*0.02), rect.top() - (rect.height()*0.02))
+        err_x = cur_target[0] - curr_tip[0]
+        err_y = cur_target[1] - curr_tip[1]
+        err_z = cur_target[2] - curr_tip[2]
+        
+        self.lbl_target_pos.setText(f"[{cur_target[0]:.3f}, {cur_target[1]:.3f}, {cur_target[2]:.3f}]")
+        self.lbl_curr_pos.setText(f"[{curr_tip[0]:.3f}, {curr_tip[1]:.3f}, {curr_tip[2]:.3f}]")
+        self.lbl_pos_err.setText(f"[{err_x:.3f}, {err_y:.3f}, {err_z:.3f}]")
 
-        # Update 2D Force Vector
+        # Update Force
         cur_force = info.get("current_force_load", [0, 0, 0])
         fx, fy, fz = cur_force[0], cur_force[1], cur_force[2]
-        self.force_line_2d.setData([0, fx], [0, fy])
-        if fx == 0 and fy == 0:
-            self.force_arrow.setStyle(angle=0)
-            self.force_arrow.setPos(0, 0)
-            self.force_arrow.setVisible(False)
-        else:
-            self.force_arrow.setVisible(True)
-            self.force_arrow.setPos(fx, fy)
-            angle = np.degrees(np.arctan2(fy, fx))
-            self.force_arrow.setStyle(angle=180-angle) # pyqtgraph arrow points backwards natively so we flip it
-            
-        self.force_z_text.setText(f"Fz: {fz:.1f} N")
+        mag = np.sqrt(fx**2 + fy**2 + fz**2)
+        
+        self.lbl_force.setText(f"[{fx:.1f}, {fy:.1f}, {fz:.1f}]")
+        self.lbl_force_mag.setText(f"{mag:.2f} N")
+
+        # Update Current Error Statistics
+        if len(self.error_data) > 0:
+            avg_err = np.mean(self.error_data)
+            max_err = np.max(self.error_data)
+            self.lbl_err_avg_cur.setText(f"{avg_err:.3f} m")
+            self.lbl_err_max_cur.setText(f"{max_err:.3f} m")
+            self.lbl_err_end_cur.setText(f"{real_error:.3f} m")
 
         self.step_count += 1
         if self.step_count % 5 == 0:

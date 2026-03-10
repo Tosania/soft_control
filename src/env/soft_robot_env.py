@@ -15,8 +15,8 @@ from src.core.control import SoftRobotModel, PCCController
 
 class SimpleDisturbanceEnv(gym.Env):
     """
-    极简版环境 (V6 - Minimalist Residual):
-    1. Obs 简化为 14 维 (误差向量 + 形状偏差 + PCC基准)。
+    极简版环境 (V8 - Minimalist Residual with velocity sensing):
+    1. Obs 简化为 14 维 (误差向量 + 末端速度 + PCC基准)。
     2. 采用相对坐标，加速收敛。
     3. 奖励函数优化，鼓励顺从。
     """
@@ -28,13 +28,10 @@ class SimpleDisturbanceEnv(gym.Env):
             "dist": 2.0,  # 距离奖励
             "smooth": 0.5,  # 动作平滑惩罚
             "effort": 0.5,  # 动作稀疏/能耗惩罚
-            "damping": 2.0,  # 速度阻尼
-            "shape": 0.4,  # 形状维持
         },
         # 奖励函数的计算超参
         "reward_scales": {
             "dist_scale": 5.0,  # 控制 tanh 的收敛陡峭程度
-            "vel_penalty_scale": 0.1,  # 速度惩罚的高斯带宽
         },
         # 终止条件
         "limits": {
@@ -62,7 +59,6 @@ class SimpleDisturbanceEnv(gym.Env):
                     self.config[key].update(val)
                 else:
                     self.config[key] = val
-        self.vel_penalty_coef = 2.0
         # 状态缓存
         self.last_action = np.zeros(8)
         self.last_tip_pos = np.zeros(3)
@@ -85,9 +81,9 @@ class SimpleDisturbanceEnv(gym.Env):
         # 动作: Residual [-1, 1], 实际缩放由 residual_scale 控制
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(8,), dtype=np.float32)
 
-        # [关键] 观测简化为 14 维
+        # [关键] 观测改为 14 维 (增加末端速度感知)
         # 0-2: 末端位置误差 (Tip Error) [相对量]
-        # 3-5: 中点形状误差 (Shape Error) [感知扰动]
+        # 3-5: 末端速度 (Tip Velocity) [动态感知抗扰]
         # 6-13: PCC 基准控制量 (l_base) [基准意图]
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(14,), dtype=np.float32
@@ -96,7 +92,6 @@ class SimpleDisturbanceEnv(gym.Env):
         # 调参重点：残差缩放
         # 建议设小一点 (0.05 ~ 0.1)，保证 RL 只是微调，不会导致物理崩溃
         self.residual_scale = 0.08
-        self.mid_body_name = "ring_5_body"
 
         # --- 4. 控制器初始化 ---
         self.robot_math_model = SoftRobotModel(
@@ -187,14 +182,24 @@ class SimpleDisturbanceEnv(gym.Env):
                 # 早停
                 if dist < target_tolerance and i > 50:
                     break
+            
+            # 将预热最后的结果赋值给 current_l_base 以便构建正确的初始观测
+            current_l_base = l_base.copy()
         else:
             # Hard Mode: 不预热！
             # 计算一下初始 PCC 指令但不执行多步迭代，让 RL 面对初始的大误差
-            pass
-        # 打印一下预热用了多少步，调试用 (可选)
-        # print(f"Reset Warmup: {i} steps, Final Error: {dist:.4f}m")
+            tip_pos = self._get_tip_pos()
+            current_l_base, _ = self.pcc_controller.step(self.current_target, tip_pos)
 
-        return self._get_obs(l_base=current_l_base), {}
+        # 预热完毕后，更新状态，防止第一步 step 算出极大的速度惩罚
+        self.last_tip_pos = self._get_tip_pos()
+        self.last_action = np.zeros(8)
+        self.current_tip_velocity = np.zeros(3)
+
+        # 获取初始观测时，把对应的 l_base 传进去，同时也会更新 mid_shape_error 
+        obs = self._get_obs(l_base=current_l_base)
+
+        return obs, {}
 
     def step(self, action):
         # 1. 施加扰动
@@ -220,8 +225,10 @@ class SimpleDisturbanceEnv(gym.Env):
         self.data.ctrl[self.act_ids] = l_final
         mujoco.mj_step(self.model, self.data)
 
-        # 7. 计算奖励
+        # 7. 计算奖励与状态更新
         new_tip_pos = self._get_tip_pos()
+        self.current_tip_velocity = (new_tip_pos - self.last_tip_pos) / self.model.opt.timestep
+
         dist_vec = self.current_target - new_tip_pos
         distance = np.linalg.norm(dist_vec)
 
@@ -231,16 +238,10 @@ class SimpleDisturbanceEnv(gym.Env):
         scales = self.config["reward_scales"]
         limits = self.config["limits"]
 
-        # A. 追踪奖励 (指数衰减有界形式)
-        # 抛弃 1.0 - k*dist 这种会产生极大负惩罚的线性形式
-        r_dist = np.exp(-scales["dist_scale"] * distance)
+        # A. 追踪奖励
+        # 使用配置中的 dist_scale
+        r_dist = 1.0 - (scales["dist_scale"] * distance)
 
-        # B. 阻尼奖励 (惩罚速度震荡)
-        tip_velocity = (new_tip_pos - self.last_tip_pos) / self.model.opt.timestep
-        velocity_mag = np.linalg.norm(tip_velocity)
-        # 当接近目标时，严厉惩罚速度震荡 (防抽搐)
-        proximity_factor = np.exp(-(distance**2) / (scales["vel_penalty_scale"] ** 2))
-        r_damping = -self.vel_penalty_coef * proximity_factor * velocity_mag
 
         # C. 平滑与稀疏 (强调平滑补偿，允许合理发力)
         action_diff = action - self.last_action
@@ -250,15 +251,12 @@ class SimpleDisturbanceEnv(gym.Env):
         # 这里仅做基础的稀疏性约束，防止无意义的乱动
         r_effort = -np.linalg.norm(action)
 
-        # D. 形状奖励
-        r_shape = -np.linalg.norm(self.mid_shape_error)
+
 
         # === 加权求和 ===
         reward = (
             weights["dist"] * r_dist
             + weights["effort"] * r_effort
-            + weights["shape"] * r_shape
-            + weights["damping"] * r_damping
             + weights["smooth"] * r_smooth
         )
 
@@ -282,30 +280,38 @@ class SimpleDisturbanceEnv(gym.Env):
 
         obs = self._get_obs(l_base)
 
-        return obs, reward, terminated, truncated, {"dist": distance, "l_base": l_base}
+        # 记录每一个 reward component 对应的实际贡献 (乘过权重) 进 info
+        info = {
+            "dist": distance, 
+            "l_base": l_base,
+            "r_dist_weighted": weights["dist"] * r_dist,
+            "r_effort_weighted": weights["effort"] * r_effort,
+            "r_smooth_weighted": weights["smooth"] * r_smooth
+        }
+
+        return obs, reward, terminated, truncated, info
 
     def _get_obs(self, l_base):
         """
-        极简 Obs (14维)
+        极简 Obs (14维)，引入速度感知
         """
         real_tip_pos = self._get_tip_pos()
 
         # 1. 位置误差 (3) - 相对量，最关键
         tip_error = self.current_target - real_tip_pos
-
-        # 2. 形状误差 (3) - 用于感知扰动
-        real_mid_pos = self.data.body(self.mid_body_name).xpos.copy()
-        xi_curr = self.pcc_controller.xi_curr
-        fk_points = self.robot_math_model.get_fk_points(xi_curr)
-        expected_mid_pos = fk_points[0]
-        self.mid_shape_error = real_mid_pos - expected_mid_pos
+        
+        # 2. 末端速度 (3) - 解决无法感知被外部推动的问题
+        # 如果是 reset 刚进来，为 0
+        if not hasattr(self, 'current_tip_velocity'):
+            self.current_tip_velocity = np.zeros(3)
+        tip_velocity = self.current_tip_velocity.copy()
 
         # 3. PCC 基准 (8) - 告知 RL 当前的大方向
         # 不需要给 current_l，因为 current_l ≈ l_base + last_action
         # RL 网络通常能隐式推断出这个关系
 
         obs = np.concatenate(
-            [tip_error, self.mid_shape_error, l_base]  # (3)  # (3)  # (8)
+            [tip_error, tip_velocity, l_base]  # (3) + (3) + (8) = 14 维
         ).astype(np.float32)
 
         return obs

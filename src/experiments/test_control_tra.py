@@ -13,7 +13,9 @@ from src.core.tester import SoftRobotTester
 # --- 绘图风格设置 ---
 sns.set_theme(style="whitegrid", context="paper")
 plt.rcParams["axes.unicode_minus"] = False
-plt.rcParams["font.family"] = "sans-serif"
+# 推荐学术论文使用的衬线字体
+plt.rcParams["font.family"] = "serif"
+plt.rcParams["font.serif"] = ["Times New Roman", "DejaVu Serif", "serif"]
 
 
 # ==========================================
@@ -202,6 +204,12 @@ import numpy as np
 def plot_complex_analysis(
     data_pcc, data_hybrid, scheduler, save_path="complex_load_test.png"
 ):
+    # 提前定义高级配色方案 (Nature 风格)
+    C_REF = "gray"
+    C_PCC = "#4DBBD5"       # 科研蓝
+    C_HYBRID = "#E64B35"    # 砖红色
+    C_SPAN = "#F39B7F"      # 扰动区间强调色
+    
     t = np.array(data_pcc["time"])
     ref = np.array(data_pcc["ref"])
     act_pcc = np.array(data_pcc["act"])
@@ -209,66 +217,70 @@ def plot_complex_analysis(
     act_hybrid = np.array(data_hybrid["act"])
     err_hybrid = np.array(data_hybrid["error"])
 
-    # 1. 设置画布 (宽, 高)
-    # 把它设宽一点，方便右图横向展开
-    fig = plt.figure(figsize=(15, 6))
-
-    # 使用 GridSpec 分割：左边占 1 份，右边占 2 份宽
-    # 这会给右图预留更多的横向空间
+    fig = plt.figure(figsize=(14, 5.5))  # 横向拉宽
     gs = gridspec.GridSpec(1, 2, width_ratios=[1, 2], wspace=0.15)
 
-    # -----------------------------------------
-    # 左图：轨迹 (保持正方形)
-    # -----------------------------------------
+    # ---------- 左图：二维空间轨迹 ----------
     ax_traj = fig.add_subplot(gs[0])
-    ax_traj.plot(ref[:, 0], ref[:, 1], "k--", label="Ref")
-    ax_traj.plot(act_pcc[:, 0], act_pcc[:, 1], "b-.", label="PCC")
-    ax_traj.plot(act_hybrid[:, 0], act_hybrid[:, 1], "r-", label="Hybrid")
+    
+    # 设定线宽、图层顺序(zorder)，主线在最上
+    ax_traj.plot(ref[:, 0], ref[:, 1], color=C_REF, linestyle="--", linewidth=1.5, zorder=1, label="Reference")
+    ax_traj.plot(act_pcc[:, 0], act_pcc[:, 1], color=C_PCC, linestyle="-.", linewidth=2.0, alpha=0.8, zorder=2, label="PCC")
+    ax_traj.plot(act_hybrid[:, 0], act_hybrid[:, 1], color=C_HYBRID, linestyle="-", linewidth=2.2, zorder=3, label="Hybrid")
 
-    ax_traj.set_xlabel("X (m)")
-    ax_traj.set_ylabel("Y (m)")
-    ax_traj.grid(True, linestyle=":", alpha=0.6)
-    ax_traj.legend(loc="upper right")
+    # 标记起点
+    ax_traj.scatter(ref[0, 0], ref[0, 1], color="black", s=60, marker="o", edgecolors="white", zorder=5, label="Start")
 
-    # [关键] 强制左图为正方形 (物理形状)
-    ax_traj.set_box_aspect(1)
+    ax_traj.set_xlabel("Position $x$ (m)")
+    ax_traj.set_ylabel("Position $y$ (m)")
+    ax_traj.grid(True, linestyle=":", alpha=0.5)
+    
+    # 图例优化
+    ax_traj.legend(loc="best", frameon=True, framealpha=0.8, edgecolor="none", fontsize=10)
+    ax_traj.set_box_aspect(1) # 维持左图物理空间长宽比例为1:1
 
-    # -----------------------------------------
-    # 右图：误差 (自定义长宽比)
-    # -----------------------------------------
+    # ---------- 右图：跟踪误差与时序 ----------
     ax_err = fig.add_subplot(gs[1])
 
-    ax_err.plot(t, err_pcc, "b-.", alpha=0.6, label="PCC")
-    ax_err.plot(t, err_hybrid, "r-", label="Hybrid")
+    ax_err.plot(t, err_pcc, color=C_PCC, linestyle="-.", linewidth=2.0, alpha=0.8, label="PCC Error")
+    ax_err.plot(t, err_hybrid, color=C_HYBRID, linestyle="-", linewidth=2.2, label="Hybrid Error")
 
-    # 绘制扰动区间
+    # 绘制扰动事件区并赋予文本标签
+    y_max = max(np.max(err_pcc), np.max(err_hybrid))
     for idx, (start, end) in enumerate(scheduler.active_intervals):
-        ax_err.axvspan(start, end, color="gray", alpha=0.15)
+        ax_err.axvspan(start, end, color=C_SPAN, alpha=0.15)
+        # 加上文本标识
+        ax_err.text(start + 0.1, y_max * 0.90, f"Dist {idx+1}", color="#a0522d", fontsize=10, fontweight="bold")
 
-    ax_err.set_xlabel("Time (s)")
-    ax_err.set_ylabel("Error (m)")
+    ax_err.set_xlabel("Time $t$ (s)")
+    ax_err.set_ylabel("Tracking Error $e$ (m)")
     ax_err.set_ylim(bottom=0)
-    ax_err.grid(True, alpha=0.3)
-    ax_err.legend()
-
-    # =========================================================
-    # [核心修改] 强制设置右图的长宽比例 (Height / Width)
-    # =========================================================
-
-    # 如果您想要【扁长的长方形】(横轴长，纵轴短，适合时间序列):
-    # 设置为小于 1 的数。例如 0.5 表示高度是宽度的一半。
+    ax_err.set_xlim(left=0, right=t[-1])
+    ax_err.grid(True, linestyle=":", alpha=0.5)
+    
+    # 扁平化纵向图例放置于外部上方
+    ax_err.legend(loc="upper center", bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=11)
+    
+    # 维持你之前喜欢的长宽比，如果是误差时间序列推荐依然设定长条形
     ax_err.set_box_aspect(0.4)
-
-    # 如果您想要【瘦高的长方形】(纵轴长，横轴短):
-    # 设置为大于 1 的数。例如 1.5 表示高度是宽度的 1.5 倍。
-    # ax_err.set_box_aspect(1.5)
-
-    # =========================================================
 
     plt.tight_layout()
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.show()
+        # 高清输出
+        plt.savefig(save_path, dpi=600, bbox_inches="tight")
+        # 也存一份 PDF 矢量图
+        pdf_path = save_path.rsplit('.', 1)[0] + '.pdf'
+        plt.savefig(pdf_path, dpi=600, bbox_inches="tight")
+        
+    # 避免在无桌面环境报错或阻塞
+    try:
+        import matplotlib
+        if matplotlib.get_backend().lower() != "agg":
+            plt.show()
+    except:
+        pass
+    finally:
+        plt.close(fig)
 
 def plot_control_analysis(data_pcc, data_hybrid, scheduler, save_path="tra_control_analysis.png"):
     time_axis = np.array(data_hybrid["time"])
@@ -406,4 +418,4 @@ if __name__ == "__main__":
 
     # 3. 绘图
     plot_complex_analysis(data_pcc, data_hybrid, scheduler, save_path="rose.png")
-    plot_control_analysis(data_pcc, data_hybrid, scheduler, save_path="tra_control_analysis.png")
+    #plot_control_analysis(data_pcc, data_hybrid, scheduler, save_path="tra_control_analysis.png")
